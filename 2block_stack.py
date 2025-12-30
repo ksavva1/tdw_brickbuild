@@ -1,5 +1,3 @@
-import json
-import numpy as np
 from tdw.controller import Controller
 from tdw.tdw_utils import TDWUtils
 from tdw.add_ons.third_person_camera import ThirdPersonCamera
@@ -10,87 +8,114 @@ class MagnebotStacking(Controller):
         super().__init__(launch_build=True)
 
     def run(self):
-        # Setup camera
-        camera = ThirdPersonCamera(position={"x": 0, "y": 1.5, "z": -1.8},
-                                   look_at={"x": 0, "y": 0.5, "z": 0},
+        # Add camera & Magnebot
+        camera = ThirdPersonCamera(position={"x": 0, "y": 1.2, "z": -1.5},
+                                   look_at={"x": 0, "y": 0.4, "z": 0},
                                    avatar_id="a")
 
-        # Setup magnebot
-        magnebot = Magnebot(position={"x": -0.7, "y": 0, "z": 0}, 
+        magnebot = Magnebot(position={"x": -0.75, "y": 0, "z": 0},
                             rotation={"x": 0, "y": 90, "z": 0})
-        
+
         self.add_ons.extend([camera, magnebot])
 
         # Object IDs
         table_id = self.get_unique_id()
         grey_box_id = self.get_unique_id()
         red_box_id = self.get_unique_id()
-        
-        commands = []
-        
-        # Create room & table
-        commands.append(TDWUtils.create_empty_room(12, 12))
-        
-        commands.extend(self.get_add_physics_object(model_name="small_table_green_marble",
-                                                    object_id=table_id,
-                                                    position={"x": 0, "y": 0, "z": 0},
-                                                    scale_factor={"x": 0.6, "y": 1.0, "z": 0.6}))
 
-        # 5. Add boxes
-        commands.extend(self.get_add_physics_object(model_name="iron_box",
-                                                    object_id=red_box_id,
-                                                    position={"x": -0.3, "y": 1.0, "z": 0},
-                                                    scale_factor={"x": 0.5, "y": 0.5, "z": 0.5}))
+        commands = []
+        commands.append(TDWUtils.create_empty_room(12, 12))
+
+        # Add table & boxes
+        table_surface_y = 0.38
+        commands.extend(self.get_add_physics_object(
+            model_name="small_table_green_marble",
+            object_id=table_id,
+            position={"x": 0, "y": 0, "z": 0},
+            scale_factor={"x": 0.8, "y": 0.5, "z": 0.8}
+        ))
+
+        box_scale = 0.5
         
-        commands.extend(self.get_add_physics_object(model_name="iron_box",
-                                                    object_id=grey_box_id,
-                                                    position={"x": 0.0, "y": 1.0, "z": 0},
-                                                    scale_factor={"x": 0.5, "y": 0.5, "z": 0.5}))
-        
-        commands.append({"$type": "set_color",
-                         "color": {"r": 1.0, "g": 0, "b": 0, "a": 1.0},
-                         "id": red_box_id})
+        commands.extend(self.get_add_physics_object(
+            model_name="iron_box",
+            object_id=red_box_id,
+            position={"x": -0.30, "y": table_surface_y, "z": 0},
+            scale_factor={"x": box_scale, "y": box_scale, "z": box_scale}
+        ))
+        commands.extend(self.get_add_physics_object(
+            model_name="iron_box",
+            object_id=grey_box_id,
+            position={"x": -0.05, "y": table_surface_y, "z": 0},
+            scale_factor={"x": box_scale, "y": box_scale, "z": box_scale}
+        ))
+        commands.append({"$type": "set_mass", "id": red_box_id, "mass": 1.0}) #(1kg)
+        commands.append({"$type": "set_mass", "id": grey_box_id, "mass": 1.0})
+
+        commands.append({
+            "$type": "set_color",
+            "color": {"r": 1.0, "g": 0, "b": 0, "a": 1.0}, # Red
+            "id": red_box_id
+        })
 
         self.communicate(commands)
-        
+
         def run_action(name):
             print(f"Action: {name}...")
             while magnebot.action.status == ActionStatus.ongoing:
                 self.communicate([])
-            self.communicate([]) 
-            
+            self.communicate([])
+
             if magnebot.action.status != ActionStatus.success:
-                print(f"!!! FAILED: {name} | Reason: {magnebot.action.status}")
-                while True: self.communicate([])
+                # Output failure reason
+                print(f"!!! FAILED: {name} | Status: {magnebot.action.status}") 
             else:
                 print(f"Success: {name}")
 
-        # ------------------ ANIMATION SEQUENCE ------------------
-        # 1. Slide torso up
-        magnebot.slide_torso(height=1.0)
-        run_action("Slide Torso Up")
+        # ------------------ ACTION SEQUENCE ------------------
+        # Slide torso
+        magnebot.slide_torso(height=0.8)
+        run_action("Adjust Torso")
 
-        # 2. Pose arm
-        magnebot.reach_for(target={"x": -0.3, "y": 1.35, "z": 0}, arm=Arm.right)
-        run_action("Pre-pose Arm")
+        # Reach for red box
+        magnebot.reach_for(target={"x": -0.30, "y": table_surface_y + 0.05, "z": 0}, 
+                           arm=Arm.right)
+        run_action("Reach Red Box")
 
-        # 3. Grasp Red Box
+        # Grasp
         magnebot.grasp(target=red_box_id, arm=Arm.right)
         run_action("Grasp Red Box")
 
-        # 4. Lift Above Grey Box
-        magnebot.reach_for(target={"x": 0.0, "y": 1.45, "z": 0}, arm=Arm.right)
-        run_action("Lift Object")
+        # Lift above grey box
+        drop_target_pos = {"x": -0.02, "y": table_surface_y + 0.8, "z": 0}
+        magnebot.reach_for(target=drop_target_pos, arm=Arm.right)
+        run_action("Move Above Grey Box")
 
-        # 5. Drop
-        magnebot.drop(target=grey_box_id, arm=Arm.right)
-        run_action("Drop Object")
+        # Settling phase
+        print("Settling physics...")
+        for i in range(20):
+            self.communicate([])
 
-        # 6. Reset Arm
+        # Manual drop
+        print("Action: Manual Drop...")
+        self.communicate({"$type": "detach_from_magnet", 
+                          "id": magnebot.robot_id, 
+                          "arm": "right", 
+                          "object_id": red_box_id})
+        
+        for i in range(30):
+            self.communicate([])
+
+        # Retract arm avoiding the stack
+        retract_target_pos = {"x": -0.40, "y": table_surface_y + 0.5, "z": 0}
+        magnebot.reach_for(target=retract_target_pos, arm=Arm.right)
+        run_action("Safe Retract")
+
+        # Reset
         magnebot.reset_arm(arm=Arm.right)
         run_action("Reset Arm")
-
         print("Stacking Complete!")
+        
         while True:
             self.communicate([])
 
