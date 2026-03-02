@@ -8,3 +8,6 @@ This repo is a small test project that hardcodes a brick building model in TDW (
 
 ### Two block stacking demo
 https://github.com/user-attachments/assets/d149e705-a3df-4611-9455-ea05bde646fa
+
+### Four block 'jenga' stacking demo
+https://github.com/user-attachments/assets/3c463920-fc40-414f-b12f-acf5810f62f2
